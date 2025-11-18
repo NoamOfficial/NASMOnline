@@ -1,0 +1,36 @@
+name: UltimateOS NASM Build
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install NASM
+        run: sudo apt-get update && sudo apt-get install -y nasm
+
+      - name: Assemble UltimateOS .asm files to .bin
+        run: |
+          mkdir -p build
+          for f in *.asm; do
+            # Assemble directly to flat binary
+            nasm "$f" -I include -f bin -o "build/${f%.asm}.bin"
+          done
+
+      - name: List build output
+        run: ls -l build
+
+      - name: Upload UltimateOS binaries
+        uses: actions/upload-artifact@v3
+        with:
+          name: ultimateos-binaries
+          path: build/*.bin
+
