@@ -25,4 +25,4 @@ global Entry1
 global Entry2
 global Entry3
 BootPolicyList:
-db 00 0F 0B FF FC
+db 00, 0F, 0B, FF, FC
