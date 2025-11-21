@@ -1,39 +1,68 @@
 section .bss
-RPCMessage:
-RPCData resd 2
-RPCmemory resb 65335
-RPCWriteData resb 1024
+RPCData      resd 2        ; 8 bytes for command
+RPCmemory    resb 65335    ; buffer
+RPCWriteData resb 1024     ; write buffer
+
 global RPCWriteData
 global RPCData
-section .code
-cmp RPCData, "WRT"
-je WRITEMESSAGE
-cmp RPCData, "CHCLR" 
-cmp RPCData, "READ"
-je CacheClear
+global RPCHandler
+
+section .text
+RPCHandler:
+
+    ; ------------------------
+    ; Load command from RPCData
+    ; ------------------------
+    mov eax, [RPCData]      ; load first 4 bytes
+    cmp eax, 'WRT'          ; write command
+    je WRITEMESSAGE
+    cmp eax, 'READ'         ; read command
+    je READRPC
+    cmp eax, 'CHCL'         ; first 4 chars of "CHCLR"
+    je CacheClear
+    jmp RPCDone             ; unknown command
+
+; ------------------------
+; Write message
+; ------------------------
 WRITEMESSAGE:
-MOV ES, [RPCmemory]
-MOV DI, 0
-MOV DS, RPCWriteData
-MOV SI, 0
-mov al, byte [DS:SI]
-STOSB
-inc si
-jnc WRITEMESSAGE
+    xor esi, esi            ; index in RPCWriteData
+    xor edi, edi            ; index in RPCmemory
+WRITE_LOOP:
+    mov al, [RPCWriteData + esi]
+    cmp al, 0               ; stop at null
+    je WRITE_DONE
+    mov [RPCmemory + edi], al
+    inc esi
+    inc edi
+    jmp WRITE_LOOP
+WRITE_DONE:
+    jmp RPCDone
+
+; ------------------------
+; Clear write buffer
+; ------------------------
 CacheClear:
-MOV [RPCWriteData], 0
+    mov ecx, 1024
+    mov edi, RPCWriteData
+    xor eax, eax
+    rep stosb                ; zero RPCWriteData
+    jmp RPCDone
+
+; ------------------------
+; Read RPC
+; ------------------------
 READRPC:
-MOV ES, [RPCmemory]
-MOV DI, 0
-STOSB
-MOV BH, AL
-STOSB
-MOV BL, AL
-STOSB
-MOV DH, AL
-STOSB
-MOV DL, AL
-IRET
+    mov al, [RPCmemory]     ; read first byte
+    mov bl, [RPCmemory + 1]
+    mov bh, [RPCmemory + 2]
+    mov dl, [RPCmemory + 3]
+    ; further processing here
+    jmp RPCDone
+
+RPCDone:
+    iret
+
 
 
 
