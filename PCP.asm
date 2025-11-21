@@ -1,5 +1,5 @@
-; PCP.asm - Process Control for Virtual Modes
-; Handles 16-bit and 32-bit switching
+; PCP.asm - Process Control for Virtual Modes (PCVM)
+; Fully NASM-clean, 16/32-bit switch, no obsolete instructions
 
 section .text
 global PCPEntry
@@ -9,7 +9,7 @@ PCPEntry:
     je PCVMRun
     cmp ah, 1
     je PCVMTerminate
-    jmp PCVMDone        ; fallback if unknown
+    jmp PCVMDone         ; fallback if unknown
 
 ; -------------------------
 ; Run 16-bit mode procedure
@@ -17,22 +17,22 @@ PCPEntry:
 PCVMRun:
     pushf                ; save flags
     push ds              ; save ds
-    push cs              ; save cs
 
-    ; Save return address manually instead of push eip
+    ; Call 16-bit wrapper (EDX points to 16-bit procedure)
     call PCVM16Wrapper
     ; execution returns here in 32-bit mode
 
-    pop cs
     pop ds
     popf
     iret
 
-; 16-bit wrapper called via call
+; -------------------------
+; 16-bit wrapper
+; -------------------------
 [BITS 16]
 PCVM16Wrapper:
-    call edx             ; jump to 16-bit procedure
-    retf                 ; far return back to 32-bit
+    call edx             ; run 16-bit code
+    retf                  ; far return back to 32-bit
 [BITS 32]
 
 ; -------------------------
@@ -47,4 +47,5 @@ PCVMTerminate:
 
 PCVMDone:
     iret
+
 
