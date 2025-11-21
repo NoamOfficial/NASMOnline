@@ -1,28 +1,47 @@
+global BootConfig
 global testsigning
 global useatadrivers
 global OSVersion
 global DataWipe
-section .data
-Config:
-testsigning db 0
-useatadrivers db 0
-OSVersion dd 0x10
-DataWipe db 2
-DiskDriverConfig:
-diskMode dw "NATA"
-ControllerInLegacyMode db 0
-ISDEnabled db 0
-global Mode
-Global diskMode
+global diskMode
 global ControllerInLegacyMode
 global ISDEnabled
-Entry0:
-BootSectorStartingLBA dw 0
-BootSectorCount dw 4
-Entry1: resb 4
-Entry2: resb 4
-Entry3: resb 4
+global Mode
+global Entry0
 global Entry1
 global Entry2
 global Entry3
+
+section .bss
+BootConfig:                   ; start of contiguous struct
+    ; ------------------- Config -------------------
+    testsigning          resb 1
+    useatadrivers        resb 1
+    OSVersion            resd 1          ; 4 bytes
+    DataWipe             resb 1
+    align 4                               ; pad to 4-byte boundary
+
+    ; ---------------- DiskDriverConfig -------------
+    diskMode             resd 1          ; 4 bytes for ASCII 'NATA'
+    ControllerInLegacyMode resb 1
+    ISDEnabled           resb 1
+    align 4                               ; pad to 4-byte boundary
+
+    ; ---------------- Mode ------------------------
+    Mode                 resb 1
+    align 4                               ; pad to 4-byte boundary
+
+    ; ---------------- Boot Entries -----------------
+Entry0:
+    BootSectorStartingLBA  resw 1        ; 2 bytes
+    BootSectorCount        resw 1        ; 2 bytes
+    align 4                               ; pad for 32-bit Entry1
+
+Entry1: 
+    resd 1                               ; 4 bytes
+Entry2: 
+    resd 1                               ; 4 bytes
+Entry3: 
+    resd 1                               ; 4 bytes
+
 
