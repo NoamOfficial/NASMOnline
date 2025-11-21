@@ -2,9 +2,10 @@ global testsigning
 global useatadrivers
 global OSVersion
 global DataWipe
+section .data
 Config:
-testsigning db 2
-useatadrivers db 2
+testsigning db 0
+useatadrivers db 0
 OSVersion dd 0x10
 DataWipe db 2
 DiskDriverConfig:
@@ -16,7 +17,7 @@ Global diskMode
 global ControllerInLegacyMode
 global ISDEnabled
 Entry0:
-BootSectorStartingLBA dw 2
+BootSectorStartingLBA dw 0
 BootSectorCount dw 4
 Entry1: resb 4
 Entry2: resb 4
