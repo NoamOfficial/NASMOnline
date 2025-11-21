@@ -1,9 +1,11 @@
+section .bss
 RPCMessage:
-RPCData resb 8
+RPCData resd 2
 RPCmemory resb 65335
 RPCWriteData resb 1024
 global RPCWriteData
 global RPCData
+section .code
 cmp RPCData, "WRT"
 je WRITEMESSAGE
 cmp RPCData, "CHCLR" 
