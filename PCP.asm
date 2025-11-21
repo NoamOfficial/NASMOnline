@@ -11,14 +11,14 @@ PCVMRun:
     pushf                ; save flags
     push ds              ; save ds
     push cs              ; save cs
-    push ip              ; save ip (NASM replaces it properly)
+    push eip           ; save ip (NASM replaces it properly)
 
     [BITS 16]
     call edx             ; run 16-bit code
     [BITS 32]
 
     ; restore state
-    pop ip
+    pop eip
     pop cs
     pop ds
     popf
