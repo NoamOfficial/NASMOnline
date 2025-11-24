@@ -87,7 +87,7 @@ incsecond:
     dec eax
     mov ebx, [month_lengths + eax*4]
 
-    cmp [UO_Months], 2
+    cmp dword [UO_Months], 2
     jne .skip_leap
     mov eax, [UO_Years]
     mov edx, 0
