@@ -7,8 +7,8 @@ Char db 0
 color db 0
 section .text
 main:
-MOV ES, 0x01
-mov di, 0
+mov es, [0x01]
+mov edi, 0
 stosw
 cmp al, "kp"
 je BugCheck
@@ -32,7 +32,7 @@ mul dx        ; ax = y * 80
 add ax, x     ; ax = y*80 + x
 shl ax, 1     ; ax *= 2 -> final offset
 
-mov di, ax
+mov edi, ax
 mov al, Char
 mov ah, color
 stosw         ; write to ES:DI
@@ -43,11 +43,11 @@ global color
 global Char
 bugcheck:
 BugCheckString db "UltimateOS had Terminated because of a kernel panic, we'll restart for you"
-mov ds, BugCheckString
+mov ds, [BugCheckString]
 mov si, 0
-mov es, 0xB0000
-MOV DI, 0
-REP MOVSB
+mov es, [0xB0000]
+mov edi, 0
+rep movsb
 
 
 
