@@ -10,7 +10,7 @@ main:
 MOV ES, 0x01
 mov di, 0
 stosw
-cmp al, kp
+cmp al, "kp"
 je BugCheck
 push esp
 push ebp
@@ -41,6 +41,14 @@ global y
 global vgaPrint
 global color
 global Char
+bugcheck:
+BugCheckString db "UltimateOS had Terminated because of a kernel panic, we'll restart for you"
+mov ds, BugCheckString
+mov si, 0
+mov es, 0xB0000
+MOV DI, 0
+REP MOVSB
+
 
 
 
