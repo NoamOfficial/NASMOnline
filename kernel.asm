@@ -18,7 +18,8 @@ cmp dl, "i"
 je HandleInterrupt
 HandleInterrupt:
 mov al, dh
-mult 4
+mov bx, 4
+mult bx 
 jmp main
 vgaPrint:
 mov ax, vgaBase
