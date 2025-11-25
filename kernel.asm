@@ -41,13 +41,18 @@ global y
 global vgaPrint
 global color
 global Char
-bugcheck:
-BugCheckString db "UltimateOS had Terminated because of a kernel panic, we'll restart for you"
+BugCheck:
+BugCheckString dq "UltimateOS had Terminated because of a kernel panic, we'll restart for you"
 mov ds, [BugCheckString]
 mov si, 0
 mov es, [0xB0000]
 mov edi, 0
 rep movsb
+global vgaPrint
+global x
+global y
+global color
+global Char
 
 
 
