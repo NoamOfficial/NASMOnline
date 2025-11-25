@@ -19,7 +19,7 @@ je HandleInterrupt
 HandleInterrupt:
 mov al, dh
 mov bx, 4
-mult bx 
+mul bx 
 jmp main
 vgaPrint:
 mov ax, vgaBase
