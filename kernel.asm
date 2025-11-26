@@ -45,9 +45,20 @@ BugCheck:
 BugCheckString dq "UltimateOS had Terminated because of a kernel panic, we'll restart for you"
 mov ds, [BugCheckString]
 mov si, 0
-mov es, [0xB0000]
+loop:
+mov eax, [0xB0000]
 mov edi, 0
-rep movsb
+mov [eax:edi], [ds:si]
+add edi, 2
+cmp [ds:si], 0
+jne loop
+je ResetAfterCrash:
+ResetAfterCrash:
+cli
+in al, 0x92
+or al, 000000b1
+out 0x92, al
+
 global vgaPrint
 global x
 global y
