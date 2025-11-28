@@ -5,7 +5,7 @@ section .text
 WriteFile:
 MOV AH, 0
 MOV DX, FileStart
-call SET_SECTOR_NUM_32
+call [SET_SECTOR_NUM_32]
 int 13h
 ret
 ReadFile:
