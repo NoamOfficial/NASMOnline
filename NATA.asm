@@ -8,7 +8,7 @@
 section .bss
 align 4096
 NATA_BUFFER:
-    resb 33554432   ; 32MB buffer for multi-sector transfers
+    resb 33554432   
 
 section .text
 global NATA_INIT
