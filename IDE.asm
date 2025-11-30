@@ -21,10 +21,10 @@ je Write
 cmp ah, 0x01
 je Read
 Write:
-in ax, STATUS_REG
+in ax, 0x1F7
 test ax, 0x88
 jz Write_loop
-Writeloop:
+Write_loop:
 mov al, 0x39
 mov dx, 0x1F7
 out dx, al
@@ -52,7 +52,7 @@ OUTSW
 jnz writefast
 jz Done
 Read:
-in al, 0x1F7
+in ax, 0x1F7
 test al, 0x88
 jz readloop
 readloop:
