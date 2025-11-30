@@ -1,6 +1,7 @@
 section .bss
-PIOData: resb 8192       ; buffer for 16 sectors
-count:   resb 1           ; number of sectors to transfer
+align 2
+PIOData: resw 4096       ; 16 sectors * 512 bytes / 2 = 4096 words
+count:   resw 1          ; number of sectors to transfer (16-bit safe)
 
 section .text
 global PIO_Transfer
@@ -56,8 +57,8 @@ PIO_Write:
     push si
 
     mov si, PIOData
-    mov cl, [count]
-    xor ch, ch          ; high byte for LBA increment
+    mov cx, [count]          ; number of sectors
+    xor bx, bx               ; LBA high byte counter
 
 write_loop:
     call wait_drq
@@ -89,10 +90,10 @@ write_loop:
     mov al, 0
     out dx, al
     mov dx, LBA_HIGH_LOW
-    mov al, ch
+    mov al, bl
     out dx, al
     mov dx, LBA_HIGH_BITS
-    mov al, 0xE0
+    mov al, 0xE0         ; master + top LBA bits
     out dx, al
 
     call delay_420ns
@@ -105,14 +106,15 @@ write_loop:
     call wait_drq
 
     ; ---- REP OUTSW stream buffer 512 bytes (256 words) ----
-    mov cx, 256
     mov dx, DATA_REG
+    mov si, PIOData
+    mov cx, 256            ; 256 words per sector
     rep outsw
 
-    ; ---- increment buffer and LBA high byte ----
-    add si, 512
-    inc ch
-    loop write_loop
+    add si, 256*2          ; advance buffer pointer
+    inc bl                  ; increment high LBA byte
+    dec cx
+    jnz write_loop
 
     pop si
     pop cx
@@ -128,8 +130,8 @@ PIO_Read:
     push di
 
     mov di, PIOData
-    mov cl, [count]
-    xor ch, ch
+    mov cx, [count]
+    xor bx, bx               ; LBA high byte counter
 
 read_loop:
     call wait_drq
@@ -161,7 +163,7 @@ read_loop:
     mov al, 0
     out dx, al
     mov dx, LBA_HIGH_LOW
-    mov al, ch
+    mov al, bl
     out dx, al
     mov dx, LBA_HIGH_BITS
     mov al, 0xE0
@@ -177,13 +179,15 @@ read_loop:
     call wait_drq
 
     ; ---- REP INSW stream 512 bytes (256 words) ----
-    mov cx, 256
     mov dx, DATA_REG
+    mov di, PIOData
+    mov cx, 256
     rep insw
 
-    add di, 512
-    inc ch
-    loop read_loop
+    add di, 256*2
+    inc bl
+    dec cx
+    jnz read_loop
 
     pop di
     pop cx
