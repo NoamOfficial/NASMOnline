@@ -193,13 +193,3 @@ read_loop:
     pop cx
     pop dx
     ret
-
-
-
-
-
-
-
-
-
-
