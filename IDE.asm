@@ -6,6 +6,7 @@ count:   resw 1          ; number of sectors to transfer (16-bit safe)
 section .text
 global PIO_Transfer
 
+; ATA ports
 SECTOR_COUNT_LOW   EQU 0x1F2
 LBA_LOW_LOW        EQU 0x1F3
 LBA_MID_LOW        EQU 0x1F4
@@ -58,7 +59,7 @@ PIO_Write:
 
     mov si, PIOData
     mov cx, [count]          ; number of sectors
-    xor bx, bx               ; LBA high byte counter
+    xor bx, bx               ; high byte of LBA
 
 write_loop:
     call wait_drq
@@ -131,7 +132,7 @@ PIO_Read:
 
     mov di, PIOData
     mov cx, [count]
-    xor bx, bx               ; LBA high byte counter
+    xor bx, bx               ; LBA high byte
 
 read_loop:
     call wait_drq
@@ -193,3 +194,4 @@ read_loop:
     pop cx
     pop dx
     ret
+
