@@ -1,7 +1,9 @@
-section .data
-PIOData:
-    resb 8192           ; 16 sectors * 512 bytes
-count db 0             ; number of sectors to transfer
+section .bss
+PIOData: resb 8192       ; buffer for 16 sectors
+count:   resb 1           ; number of sectors to transfer
+
+section .text
+global PIO_Transfer
 
 SECTOR_COUNT_LOW   EQU 0x1F2
 LBA_LOW_LOW        EQU 0x1F3
@@ -12,23 +14,32 @@ COMMAND_REG        EQU 0x1F7
 STATUS_REG         EQU 0x1F7
 DATA_REG           EQU 0x1F0
 
-section .text
-global PIO_Transfer
-
-;==============================
-; Wait until BSY=0 and DRQ=1
-;==============================
-wait_drq:
+;--------------------------------------
+; 420 ns delay: 4 dummy status reads
+;--------------------------------------
+delay_420ns:
     in al, STATUS_REG
-    test al, 0x88      ; check BSY=0 and DRQ=1
-    cmp al, 0x08
-    jne wait_drq
+    in al, STATUS_REG
+    in al, STATUS_REG
+    in al, STATUS_REG
     ret
 
-;==============================
-; PIO Transfer dispatcher
+;--------------------------------------
+; Wait until BSY=0 and DRQ=1
+;--------------------------------------
+wait_drq:
+    call delay_420ns
+.wait:
+    in al, STATUS_REG
+    test al, 0x88      ; BSY=0, DRQ=1
+    cmp al, 0x08
+    jne .wait
+    ret
+
+;--------------------------------------
+; PIO Transfer Dispatcher
 ; AH=0x00 -> Write, AH=0x01 -> Read
-;==============================
+;--------------------------------------
 PIO_Transfer:
     cmp ah, 0x00
     je PIO_Write
@@ -36,129 +47,149 @@ PIO_Transfer:
     je PIO_Read
     ret
 
-;==============================
-; WRITE MULTIPLE (48-bit LBA)
-;==============================
+;--------------------------------------
+; WRITE MULTIPLE EXT (48-bit LBA) with REP OUTSW
+;--------------------------------------
 PIO_Write:
     push dx
     push cx
     push si
-    push bx
 
-    mov si, PIOData      ; buffer pointer
-    mov bx, 0            ; upper LBA high byte
-    mov bh, 0            ; optional upper mid byte
+    mov si, PIOData
+    mov cl, [count]
+    xor ch, ch          ; high byte for LBA increment
 
-write_sector_loop:
+write_loop:
     call wait_drq
 
-    ;--- send high bytes first (48-bit LBA) ---
+    ; ---- Send high bytes first (48-bit LBA) ----
     mov dx, SECTOR_COUNT_LOW
-    mov al, 1            ; sectors per command
+    mov al, 0
     out dx, al
     mov dx, LBA_LOW_LOW
+    mov al, 0
     out dx, al
     mov dx, LBA_MID_LOW
-    out dx, 0             ; mid high 0
+    mov al, 0
+    out dx, al
     mov dx, LBA_HIGH_LOW
-    out dx, 0             ; high high 0
+    mov al, 0
+    out dx, al
 
-    ;--- send low bytes (actual LBA) ---
+    call delay_420ns
+
+    ; ---- Send low bytes (actual LBA) ----
     mov dx, SECTOR_COUNT_LOW
-    out dx, al            ; same sector count
+    mov al, 1            ; 1 sector per command
+    out dx, al
     mov dx, LBA_LOW_LOW
-    out dx, al            ; LBA low byte
+    mov al, 0
+    out dx, al
     mov dx, LBA_MID_LOW
-    out dx, bl            ; LBA mid byte
+    mov al, 0
+    out dx, al
     mov dx, LBA_HIGH_LOW
-    out dx, bh            ; LBA high byte
+    mov al, ch
+    out dx, al
     mov dx, LBA_HIGH_BITS
-    mov al, 0xE0          ; master + top LBA bits
+    mov al, 0xE0
     out dx, al
 
-    ; Issue WRITE MULTIPLE EXT (48-bit)
+    call delay_420ns
+
+    ; ---- Issue WRITE MULTIPLE EXT ----
     mov dx, COMMAND_REG
-    mov al, 0xCD          ; WRITE MULTIPLE EXT
+    mov al, 0xCD
     out dx, al
 
-    ; Stream buffer
-    mov cx, 1024          ; 512 words
+    call wait_drq
+
+    ; ---- REP OUTSW stream buffer 512 bytes (256 words) ----
+    mov cx, 256
     mov dx, DATA_REG
     rep outsw
 
-    ; increment buffer pointer
-    add si, 512*4
-    inc bh                 ; increment high LBA byte
-    cmp bh, [count]
-    jb write_sector_loop
+    ; ---- increment buffer and LBA high byte ----
+    add si, 512
+    inc ch
+    loop write_loop
 
-    pop bx
     pop si
     pop cx
     pop dx
     ret
 
-;==============================
-; READ MULTIPLE (48-bit LBA)
-;==============================
+;--------------------------------------
+; READ MULTIPLE EXT (48-bit LBA) with REP INSW
+;--------------------------------------
 PIO_Read:
     push dx
     push cx
     push di
-    push bx
 
     mov di, PIOData
-    mov bx, 0
-    mov bh, 0
+    mov cl, [count]
+    xor ch, ch
 
-read_sector_loop:
+read_loop:
     call wait_drq
 
-    ;--- send high bytes first ---
+    ; ---- Send high bytes first (48-bit LBA) ----
+    mov dx, SECTOR_COUNT_LOW
+    mov al, 0
+    out dx, al
+    mov dx, LBA_LOW_LOW
+    mov al, 0
+    out dx, al
+    mov dx, LBA_MID_LOW
+    mov al, 0
+    out dx, al
+    mov dx, LBA_HIGH_LOW
+    mov al, 0
+    out dx, al
+
+    call delay_420ns
+
+    ; ---- Send low bytes (actual LBA) ----
     mov dx, SECTOR_COUNT_LOW
     mov al, 1
     out dx, al
     mov dx, LBA_LOW_LOW
+    mov al, 0
     out dx, al
     mov dx, LBA_MID_LOW
-    out dx, 0
-    mov dx, LBA_HIGH_LOW
-    out dx, 0
-
-    ;--- send low bytes (actual LBA) ---
-    mov dx, SECTOR_COUNT_LOW
+    mov al, 0
     out dx, al
-    mov dx, LBA_LOW_LOW
-    out dx, al
-    mov dx, LBA_MID_LOW
-    out dx, bl
     mov dx, LBA_HIGH_LOW
-    out dx, bh
+    mov al, ch
+    out dx, al
     mov dx, LBA_HIGH_BITS
     mov al, 0xE0
     out dx, al
 
-    ; Issue READ MULTIPLE EXT (48-bit)
+    call delay_420ns
+
+    ; ---- Issue READ MULTIPLE EXT ----
     mov dx, COMMAND_REG
-    mov al, 0x25          ; READ MULTIPLE EXT
+    mov al, 0x25
     out dx, al
 
-    ; Stream disk to buffer
-    mov cx, 1024
+    call wait_drq
+
+    ; ---- REP INSW stream 512 bytes (256 words) ----
+    mov cx, 256
     mov dx, DATA_REG
     rep insw
 
-    ; increment buffer pointer
-    add di, 512*4
-    inc bh
-    cmp bh, [count]
-    jb read_sector_loop
+    add di, 512
+    inc ch
+    loop read_loop
 
-    pop bx
     pop di
     pop cx
     pop dx
     ret
+
 
 
 
