@@ -1,192 +1,114 @@
-;--------------------------------------
-; UltimateOS PIO Driver Skeleton (x86)
-;--------------------------------------
 section .bss
-align 2
-PIOData: resw 4096       ; 16 sector buffer (512 bytes)
-count:   resw 1        ; number of sectors to transfer (16-bit safe)
-
+PIOData:
+StartLBA resd 1
+Data resw 2048
+Operation db 0
+global PIOData
+global StartLBA
+global Data
+global Operation
+dw HIGH 0
+dw LOW 0
+dw MID 0
 section .text
-global PIO_Transfer
+Check:
+mov dx, 0x1F7
+in al, dx    ; read status
+test al, 0x80        ; check BSY
+jnz busy_wait        ; BSY=1 -> wait
 
-; ATA ports
-SECTOR_COUNT_LOW   EQU 0x1F2
-LBA_LOW_LOW        EQU 0x1F3
-LBA_MID_LOW        EQU 0x1F4
-LBA_HIGH_LOW       EQU 0x1F5
-LBA_HIGH_BITS      EQU 0x1F6
-COMMAND_REG        EQU 0x1F7
-STATUS_REG         EQU 0x1F7
-DATA_REG           EQU 0x1F0
+test al, 0x40        ; check DRDY
+jz not_ready         ; DRDY=0 -> not ready
 
-;--------------------------------------
-; 420 ns delay (4 dummy status reads)
-;--------------------------------------
-delay_420ns:
-    in al, STATUS_REG
-    in al, STATUS_REG
-    in al, STATUS_REG
-    in al, STATUS_REG
-    ret
+test al, 0x08        ; check DRQ
+jz wait_drq          ; DRQ=0 -> wait for data
 
-;--------------------------------------
-; Wait until BSY=0 and DRQ=1
-;--------------------------------------
+GroupLBA:
+mov eax, [StartLBA]
+mov dl, al            ; LOW_L  = bits 0-7
+mov dh, ah            ; LOW_H  = bits 8-15
+mov bl, al            ; MID_L  = bits 16-23
+mov bh, ah            ; MID_H  = bits 24-31
+xor cl, cl            ; HIGH_L = 0 (since LBA < 2^32)
+xor ch, ch            ; HIGH_H = 0
+push dh
+push dl
+Run_Command:
+cmp [Operation], 0x00
+je Write
+cmp [Operation], 0x01
+je Read
+Write:
+pop al
+mov dx, 0x1F2
+out dx, al
+pop al
+mov dx, 0x1F3
+out dx, al
+mov al, bl
+mov dx, 0x1F4
+out dx, al
+mov al, bh
+mov dx, 0x1F5
+out dx, al
+mov dx, 0x1F7
+mov al, 0x24
+out dx, al
+mov dx, 0x1F0
+mov si, [Data]
+mov cx, 2048
+loop_write:
+outsw
+inc di
+check_sector:
+cmp di, 512
+je preload
+cmp di, 2048
+je Done
+preload:
+push cx
+mov cx, 512
+mov es, [Data]
+push di
+mov di, 512
+rep lodsb
+pop di
+pop cx
+jmp loop_write
 wait_drq:
-.wait:
-    in al, STATUS_REG
-    test al, 0x88      ; BSY=0, DRQ=1
-    cmp al, 0x08
-    jne .wait
-    call delay_420ns
-    ret
+test al, 0x08
+jnz Run_Command
+jz wait_drq
+not_ready:
+test al, 0x40
+jnz Run_Command
+jz not_ready
+busy_wait:
+test al, 0x80
+jnz Run_Command
+jz busy_wait
+Read:
+pop al
+mov dx, 0x1F2
+out dx, al
+pop al
+mov dx, 0x1F3
+out dx, al
+mov dx, 0x1F4
+mov al, bl
+out dx, al
+mov dx, 0x1F5
+mov al, bh
+out dx, al
+mov dx, 0x1F0
+mov es, [Data]
+mov di, 0
+OutReadData:
+outsw
+inc di
+cmp di, 2048
+je Done
+jmp OutReadData
+Done:
+ret
 
-;--------------------------------------
-; PIO Transfer Dispatcher
-; AH = 0x00 -> Write
-; AH = 0x01 -> Read
-;--------------------------------------
-PIO_Transfer:
-    cmp ah, 0x00
-    je PIO_Write
-    cmp ah, 0x01
-    je PIO_Read
-    ret
-
-;--------------------------------------
-; WRITE MULTIPLE EXT (48-bit LBA)
-;--------------------------------------
-PIO_Write:
-    push dx
-    push si
-    mov si, PIOData
-    mov cx, [count]      ; number of sectors
-    xor bx, bx           ; high byte of LBA
-
-write_loop:
-    call wait_drq
-
-    ; High bytes for 48-bit LBA
-    mov dx, SECTOR_COUNT_LOW
-    mov al, 0
-    out dx, al
-    mov dx, LBA_LOW_LOW
-    mov al, 0
-    out dx, al
-    mov dx, LBA_MID_LOW
-    mov al, 0
-    out dx, al
-    mov dx, LBA_HIGH_LOW
-    mov al, 0
-    out dx, al
-
-    call delay_420ns
-
-    ; Low bytes (actual LBA)
-    mov dx, SECTOR_COUNT_LOW
-    mov al, 1
-    out dx, al
-    mov dx, LBA_LOW_LOW
-    mov al, 0
-    out dx, al
-    mov dx, LBA_MID_LOW
-    mov al, 0
-    out dx, al
-    mov dx, LBA_HIGH_LOW
-    mov al, bl
-    out dx, al
-    mov dx, LBA_HIGH_BITS
-    mov al, 0xE0
-    out dx, al
-
-    call delay_420ns
-
-    ; Issue WRITE MULTIPLE EXT
-    mov dx, COMMAND_REG
-    mov al, 0xCD
-    out dx, al
-
-    call wait_drq
-
-    ; Stream sector via REP OUTSW
-    mov dx, DATA_REG
-    mov cx, 256         ; words per sector
-    rep outsw
-
-    add si, 512         ; advance pointer (bytes)
-    inc bl
-    dec cx
-    jnz write_loop
-
-    pop si
-    pop dx
-    ret
-
-;--------------------------------------
-; READ MULTIPLE EXT (48-bit LBA)
-;--------------------------------------
-PIO_Read:
-    push dx
-    push di
-    mov di, PIOData
-    mov cx, [count]
-    xor bx, bx
-
-read_loop:
-    call wait_drq
-
-    ; High bytes for 48-bit LBA
-    mov dx, SECTOR_COUNT_LOW
-    mov al, 0
-    out dx, al
-    mov dx, LBA_LOW_LOW
-    mov al, 0
-    out dx, al
-    mov dx, LBA_MID_LOW
-    mov al, 0
-    out dx, al
-    mov dx, LBA_HIGH_LOW
-    mov al, 0
-    out dx, al
-
-    call delay_420ns
-
-    ; Low bytes (actual LBA)
-    mov dx, SECTOR_COUNT_LOW
-    mov al, 1
-    out dx, al
-    mov dx, LBA_LOW_LOW
-    mov al, 0
-    out dx, al
-    mov dx, LBA_MID_LOW
-    mov al, 0
-    out dx, al
-    mov dx, LBA_HIGH_LOW
-    mov al, bl
-    out dx, al
-    mov dx, LBA_HIGH_BITS
-    mov al, 0xE0
-    out dx, al
-
-    call delay_420ns
-
-    ; Issue READ MULTIPLE EXT
-    mov dx, COMMAND_REG
-    mov al, 0x25
-    out dx, al
-
-    call wait_drq
-
-    ; Stream sector via REP INSW
-    mov dx, DATA_REG
-    mov cx, 256
-    rep insw
-
-    add di, 512         ; advance pointer (bytes)
-    inc bl
-    dec cx
-    jnz read_loop
-
-    pop di
-    pop dx
-    ret
