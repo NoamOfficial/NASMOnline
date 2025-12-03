@@ -2,11 +2,17 @@ bits 32
 
 section .bss
 align 4
-RAX        resq 1          ; 64-bit LBA storage (low + high)
-RXX        resq 1          ; temporary 64-bit if needed
-Buffer     resw 2048        ; 2048 words = 4096 bytes
-SectorCount resb 1          ; number of sectors
-Operation  resb 1           ; 0 = WRITE, 1 = READ
+global RAX
+global RXX
+global Buffer
+global SectorCount
+global Operation
+
+RAX         resq 1          ; 64-bit LBA
+RXX         resq 1          ; 64-bit temporary
+Buffer      resw 2048       ; 2048 words = 4096 bytes
+SectorCount resb 1           ; number of sectors
+Operation   resb 1           ; 0 = WRITE, 1 = READ
 
 section .text
 global IDE_PIO_STREAM_FINAL
@@ -14,75 +20,74 @@ global IDE_PIO_STREAM_FINAL
 IDE_PIO_STREAM_FINAL:
 
     cmp byte [Operation], 0
-    je .write
+    je write_stream
     cmp byte [Operation], 1
-    je .read
+    je read_stream
     ret
 
 ; ==================================================
 ; ================= WRITE STREAM ==================
 ; ==================================================
-.write:
-    call Setup_LBA48_Multi
+write_stream:
+    call setup_LBA48
     mov dx, 0x1F7
     mov al, 0xEA          ; WRITE STREAM EXT
     out dx, al
 
-    mov esi, Buffer        ; source pointer
-    mov ecx, [SectorCount] ; number of sectors
+    mov esi, Buffer
+    mov cl, [SectorCount]
 
-.write_sector_loop:
-    call Wait_DRQ
+write_sector_loop:
+    call wait_DRQ
     mov dx, 0x1F0
-    mov ebx, 256           ; words per sector
+    mov bx, 256            ; words per sector
 
-.write_loop:
-    o16 lodsw               ; load 16-bit from [DS:ESI] -> AX
+write_word_loop:
+    o16 lodsw               ; load 16-bit word from DS:SI -> AX
     out dx, ax              ; write word to port DX
-    dec ebx
-    jnz .write_loop
+    dec bx
+    jnz write_word_loop
 
-    dec ecx
-    jnz .write_sector_loop
+    dec cl
+    jnz write_sector_loop
     ret
 
 ; ==================================================
 ; ================= READ STREAM ===================
 ; ==================================================
-.read:
-    call Setup_LBA48_Multi
+read_stream:
+    call setup_LBA48
     mov dx, 0x1F7
     mov al, 0x25          ; READ STREAM EXT
     out dx, al
 
     mov edi, Buffer
-    mov ecx, [SectorCount]
+    mov cl, [SectorCount]
 
-.read_sector_loop:
-    call Wait_DRQ
+read_sector_loop:
+    call wait_DRQ
     mov dx, 0x1F0
-    mov ebx, 256
+    mov bx, 256
 
-.read_loop:
+read_word_loop:
     in ax, dx
-    o16 stosw               ; store word from AX -> [ES:EDI]
-    dec ebx
-    jnz .read_loop
+    o16 stosw               ; store AX -> ES:DI
+    dec bx
+    jnz read_word_loop
 
-    dec ecx
-    jnz .read_sector_loop
+    dec cl
+    jnz read_sector_loop
     ret
 
 ; ==================================================
-; ============== 48-BIT LBA SETUP =================
+; ================= 48-BIT LBA ===================
 ; ==================================================
-Setup_LBA48_Multi:
+setup_LBA48:
 
-    ; Load LBA from memory slots
     mov eax, dword [RAX]       ; low 32 bits
-    mov edx, dword [RAX+4]     ; high 32 bits (upper 16 bits used for 48-bit LBA)
+    mov edx, dword [RAX+4]     ; high 32 bits (upper 16 bits for 48-bit LBA)
 
-    ; Sector count
+    ; sector count
     mov dx, 0x1F2
     mov al, [SectorCount]
     out dx, al
@@ -115,7 +120,7 @@ Setup_LBA48_Multi:
     mov al, dh
     out dx, al
 
-    ; Master + LBA mode
+    ; master + LBA mode
     mov dx, 0x1F6
     mov al, 0x40
     out dx, al
@@ -125,17 +130,17 @@ Setup_LBA48_Multi:
 ; ==================================================
 ; ================= STATUS WAIT ===================
 ; ==================================================
-Wait_DRQ:
+wait_DRQ:
     mov dx, 0x1F7
 .wait_bsy:
     in al, dx
-    call Wait_420ns
+    call wait_420ns
     test al, 0x80          ; BSY
     jnz .wait_bsy
 
 .wait_drq:
     in al, dx
-    call Wait_420ns
+    call wait_420ns
     test al, 0x08          ; DRQ
     jnz .ready
     test al, 0x01          ; ERR
@@ -150,10 +155,11 @@ Wait_DRQ:
 ; ==================================================
 ; ================= 420ns DELAY ===================
 ; ==================================================
-Wait_420ns:
+wait_420ns:
     mov dx, 0x1F7
     in al, dx
     in al, dx
     in al, dx
     in al, dx
     ret
+
