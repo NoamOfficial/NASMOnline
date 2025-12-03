@@ -2,21 +2,20 @@ bits 32
 
 section .bss
 align 4
-StartLBA    resq 1         ; 48-bit LBA
-Buffer      resw 2048       ; 2048 words = 4096 bytes
-SectorCount resb 1          ; number of sectors to transfer
+RAX        resq 1          ; 64-bit LBA storage (low + high)
+RXX        resq 1          ; temporary 64-bit if needed
+Buffer     resw 2048        ; 2048 words = 4096 bytes
+SectorCount resb 1          ; number of sectors
+Operation  resb 1           ; 0 = WRITE, 1 = READ
 
 section .text
 global IDE_PIO_STREAM_FINAL
 
 IDE_PIO_STREAM_FINAL:
 
-    ; -----------------------
-    ; AH = 0x00 -> WRITE, AH = 0x01 -> READ
-    ; -----------------------
-    cmp ah, 0x00
+    cmp byte [Operation], 0
     je .write
-    cmp ah, 0x01
+    cmp byte [Operation], 1
     je .read
     ret
 
@@ -24,7 +23,6 @@ IDE_PIO_STREAM_FINAL:
 ; ================= WRITE STREAM ==================
 ; ==================================================
 .write:
-
     call Setup_LBA48_Multi
     mov dx, 0x1F7
     mov al, 0xEA          ; WRITE STREAM EXT
@@ -52,7 +50,6 @@ IDE_PIO_STREAM_FINAL:
 ; ================= READ STREAM ===================
 ; ==================================================
 .read:
-
     call Setup_LBA48_Multi
     mov dx, 0x1F7
     mov al, 0x25          ; READ STREAM EXT
@@ -77,50 +74,50 @@ IDE_PIO_STREAM_FINAL:
     ret
 
 ; ==================================================
-; ================= LBA48 + MULTI-SECTOR ==========
+; ============== 48-BIT LBA SETUP =================
 ; ==================================================
 Setup_LBA48_Multi:
 
-    mov rax, [StartLBA]
+    ; Load LBA from memory slots
+    mov eax, dword [RAX]       ; low 32 bits
+    mov edx, dword [RAX+4]     ; high 32 bits (upper 16 bits used for 48-bit LBA)
 
-    ; sector count = SectorCount
+    ; Sector count
     mov dx, 0x1F2
     mov al, [SectorCount]
     out dx, al
 
-    ; LBA low/mid/high (first 24 bits)
+    ; --- LBA low/mid/high (first 24 bits) ---
     mov dx, 0x1F3
     mov al, al
     out dx, al
     mov dx, 0x1F4
-    shr rax, 8
-    mov al, al
+    mov al, ah
     out dx, al
     mov dx, 0x1F5
-    shr rax, 8
-    mov al, al
-    out dx, dx
+    mov al, dl
+    out dx, al
 
-    ; LBA high/mid/high (next 24 bits)
-    shr rax, 8
+    ; --- LBA high/mid/high (next 24 bits) ---
     mov dx, 0x1F2
-    mov al, al
-    out dx, dx
+    mov al, dh
+    out dx, al
     mov dx, 0x1F3
-    shr rax, 8
-    mov al, al
-    out dx, dx
+    shr edx, 8
+    mov al, dh
+    out dx, al
     mov dx, 0x1F4
-    shr rax, 8
-    mov al, al
-    out dx, dx
+    shr edx, 16
+    mov al, dh
+    out dx, al
     mov dx, 0x1F5
-    shr rax, 8
-    mov al, al
-    out dx, dx
+    shr edx, 24
+    mov al, dh
+    out dx, al
 
+    ; Master + LBA mode
     mov dx, 0x1F6
-    mov al, 0x40           ; master + LBA mode
+    mov al, 0x40
     out dx, al
 
     ret
@@ -132,18 +129,31 @@ Wait_DRQ:
     mov dx, 0x1F7
 .wait_bsy:
     in al, dx
+    call Wait_420ns
     test al, 0x80          ; BSY
     jnz .wait_bsy
+
 .wait_drq:
     in al, dx
+    call Wait_420ns
     test al, 0x08          ; DRQ
     jnz .ready
     test al, 0x01          ; ERR
     jnz .error
     jmp .wait_drq
+
 .ready:
     ret
 .error:
     ret
 
-
+; ==================================================
+; ================= 420ns DELAY ===================
+; ==================================================
+Wait_420ns:
+    mov dx, 0x1F7
+    in al, dx
+    in al, dx
+    in al, dx
+    in al, dx
+    ret
