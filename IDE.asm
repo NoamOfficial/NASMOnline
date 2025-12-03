@@ -2,14 +2,14 @@ bits 32
 
 section .bss
 align 4
-StartLBA    resq 1        ; 48-bit LBA
-Buffer      resw 2048      ; 2048 words = 4096 bytes
-SectorCount resb 1         ; number of sectors to transfer
+StartLBA    resq 1         ; 48-bit LBA
+Buffer      resw 2048       ; 2048 words = 4096 bytes
+SectorCount resb 1          ; number of sectors to transfer
 
 section .text
-global IDE_PIO_STREAM_MULTI
+global IDE_PIO_STREAM_FINAL
 
-IDE_PIO_STREAM_MULTI:
+IDE_PIO_STREAM_FINAL:
 
     ; -----------------------
     ; AH = 0x00 -> WRITE, AH = 0x01 -> READ
@@ -30,16 +30,17 @@ IDE_PIO_STREAM_MULTI:
     mov al, 0xEA          ; WRITE STREAM EXT
     out dx, al
 
-    mov esi, Buffer       ; source pointer
-    mov ecx, SectorCount  ; sectors to write
+    mov esi, Buffer        ; source pointer
+    mov ecx, [SectorCount] ; number of sectors
 
 .write_sector_loop:
     call Wait_DRQ
     mov dx, 0x1F0
-    mov ebx, 256          ; words per sector
+    mov ebx, 256           ; words per sector
+
 .write_loop:
-    lodsw
-    out dx, ax
+    o16 lodsw               ; load 16-bit from [DS:ESI] -> AX
+    out dx, ax              ; write word to port DX
     dec ebx
     jnz .write_loop
 
@@ -58,16 +59,16 @@ IDE_PIO_STREAM_MULTI:
     out dx, al
 
     mov edi, Buffer
-    mov ecx, SectorCount
+    mov ecx, [SectorCount]
 
 .read_sector_loop:
     call Wait_DRQ
     mov dx, 0x1F0
     mov ebx, 256
+
 .read_loop:
     in ax, dx
-    mov [edi], ax
-    add edi, 2
+    o16 stosw               ; store word from AX -> [ES:EDI]
     dec ebx
     jnz .read_loop
 
@@ -131,17 +132,18 @@ Wait_DRQ:
     mov dx, 0x1F7
 .wait_bsy:
     in al, dx
-    test al, 0x80
+    test al, 0x80          ; BSY
     jnz .wait_bsy
 .wait_drq:
     in al, dx
-    test al, 0x08
+    test al, 0x08          ; DRQ
     jnz .ready
-    test al, 0x01
+    test al, 0x01          ; ERR
     jnz .error
     jmp .wait_drq
 .ready:
     ret
 .error:
     ret
+
 
