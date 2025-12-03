@@ -1,13 +1,15 @@
-BITS 32
+bits 32
+
 section .bss
 align 4
 StartLBA    resq 1        ; 48-bit LBA
 Buffer      resw 2048      ; 2048 words = 4096 bytes
+SectorCount resb 1         ; number of sectors to transfer
 
 section .text
-global IDE_PIO_STREAM_MAX
+global IDE_PIO_STREAM_MULTI
 
-IDE_PIO_STREAM_MAX:
+IDE_PIO_STREAM_MULTI:
 
     ; -----------------------
     ; AH = 0x00 -> WRITE, AH = 0x01 -> READ
@@ -23,25 +25,26 @@ IDE_PIO_STREAM_MAX:
 ; ==================================================
 .write:
 
-    call Send_LBA48_And_Count_Stream
+    call Setup_LBA48_Multi
     mov dx, 0x1F7
     mov al, 0xEA          ; WRITE STREAM EXT
     out dx, al
 
-    mov si, Buffer
-    mov cx, 2048 / 256     ; 8 blocks of 256 words
+    mov esi, Buffer       ; source pointer
+    mov ecx, SectorCount  ; sectors to write
 
-.write_block:
+.write_sector_loop:
     call Wait_DRQ
     mov dx, 0x1F0
-    mov bx, 256
+    mov ebx, 256          ; words per sector
 .write_loop:
     lodsw
     out dx, ax
-    dec bx
+    dec ebx
     jnz .write_loop
 
-    loop .write_block
+    dec ecx
+    jnz .write_sector_loop
     ret
 
 ; ==================================================
@@ -49,38 +52,39 @@ IDE_PIO_STREAM_MAX:
 ; ==================================================
 .read:
 
-    call Send_LBA48_And_Count_Stream
+    call Setup_LBA48_Multi
     mov dx, 0x1F7
     mov al, 0x25          ; READ STREAM EXT
     out dx, al
 
-    mov di, Buffer
-    mov cx, 2048 / 256     ; 8 blocks of 256 words
+    mov edi, Buffer
+    mov ecx, SectorCount
 
-.read_block:
+.read_sector_loop:
     call Wait_DRQ
     mov dx, 0x1F0
-    mov bx, 256
+    mov ebx, 256
 .read_loop:
-    insw
-    mov [di], ax
-    add di, 2
-    dec bx
+    in ax, dx
+    mov [edi], ax
+    add edi, 2
+    dec ebx
     jnz .read_loop
 
-    loop .read_block
+    dec ecx
+    jnz .read_sector_loop
     ret
 
 ; ==================================================
-; ================= LBA48 + SECTOR COUNT ==========
+; ================= LBA48 + MULTI-SECTOR ==========
 ; ==================================================
-Send_LBA48_And_Count_Stream:
+Setup_LBA48_Multi:
 
     mov rax, [StartLBA]
 
-    ; Send sector count = 1 (adjustable)
+    ; sector count = SectorCount
     mov dx, 0x1F2
-    mov al, 1
+    mov al, [SectorCount]
     out dx, al
 
     ; LBA low/mid/high (first 24 bits)
@@ -140,3 +144,4 @@ Wait_DRQ:
     ret
 .error:
     ret
+
