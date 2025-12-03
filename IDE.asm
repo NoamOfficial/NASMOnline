@@ -1,4 +1,4 @@
-
+BITS 32
 section .bss
 align 4
 StartLBA    resq 1        ; 48-bit LBA
