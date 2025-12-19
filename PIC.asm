@@ -22,12 +22,12 @@ mul edx
 push edx
 push eax
 pop eax
-movz edx, 15
+movzx edx, 15
 cmp edx, [esp]
 je JMPHandler
 JMPHandler:
 pop edx
-callf eax:0
+call eax:0
 iret
 VendorInvalid:
 hlt
